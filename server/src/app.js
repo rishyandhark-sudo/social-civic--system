@@ -1,38 +1,29 @@
-require('dotenv').config();
-const express = require('express');
-const http = require('http');
-const cors = require('cors');
-const path = require('path');
-const connectDB = require('./config/db');
-const initSocket = require('./sockets');
-const citizenRoutes = require('./modules/citizen/citizen.routes');
-const complaintRoutes = require('./modules/complaints/complaint.routes');
-const categoryRoutes = require('./modules/complaints/category.routes');
-const adminRoutes = require('./modules/admin/admin.routes');
-const workerRoutes = require('./modules/worker/worker.routes');
+app.use((req, res, next) => {
+  if (req.url.startsWith('/api') || req.url.startsWith('/socket.io')) {
+    return next();
+  }
+  next();
+});
 
-const app = express();
-const httpServer = http.createServer(app);
+// Serve frontend in production
+if (process.env.NODE_ENV === 'production' || process.env.SERVE_STATIC === 'true') {
+  const path = require('path');
+  app.use(express.static(path.join(__dirname, '../../client/dist')));
 
-connectDB();
-initSocket(httpServer);
-
-app.use(cors());
-app.use(express.json());
-
-// Serves locally-uploaded complaint media during dev.
-// Remove this once media uploads go straight to Cloudinary/S3.
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
-
-app.get('/health', (req, res) => res.json({ status: 'ok' }));
-
-app.use('/api/citizen', citizenRoutes);
-app.use('/api/complaints', complaintRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/worker', workerRoutes);
-
-app.use((req, res) => res.status(404).json({ message: 'Route not found' }));
+  app.get('*', (req, res) => {
+    if (req.url.startsWith('/api') || req.url.startsWith('/socket.io') || req.url.startsWith('/uploads')) {
+      return res.status(404).json({ message: 'Route not found' });
+    }
+    res.sendFile(path.resolve(__dirname, '../../client/dist', 'index.html'));
+  });
+} else {
+  app.use((req, res, next) => {
+    if (req.url.startsWith('/api') || req.url.startsWith('/socket.io') || req.url.startsWith('/uploads')) {
+      return next();
+    }
+    res.status(404).json({ message: 'Route not found' });
+  });
+}
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
